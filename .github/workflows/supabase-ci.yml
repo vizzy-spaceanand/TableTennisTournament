@@ -22,20 +22,18 @@ jobs:
           version: latest
           github-token: ${{ github.token }}
 
-      # 🔗 Step A: Bind the runner to the specific environment's project ID
       - name: Link to Remote Supabase Project
         run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_ID }} -p ${{ secrets.SUPABASE_DB_PASSWORD }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
-      # 🚀 Step B: Securely push the DDL migrations forward
       - name: Deploy Database Migrations
         run: supabase db push
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
-  # 💻 JOB 2: Dynamic Frontend Build
+  # 💻 JOB 2: Dynamic Frontend Build with Subdirectory Routing
   deploy-frontend:
     needs: deploy-backend
     runs-on: ubuntu-latest
@@ -52,10 +50,30 @@ jobs:
         with:
           channel: 'stable'
 
+      # 🧠 Step A: Build Production (Root path) vs Staging (Subfolder path)
+      # Notice the different --base-href injection based on the branch name!
+      # We append a trailing slash to the staging path so Flutter resolves routing correctly.
       - name: Compile Web Assets
         run: |
           flutter pub get
-          flutter build web --release \
-            --dart-define=SUPABASE_URL="${{ secrets.WEB_SUPABASE_URL }}" \
-            --dart-define=SUPABASE_ANON_KEY="${{ secrets.WEB_SUPABASE_ANON_KEY }}" \
-            --base-href "/${{ github.event.repository.name }}/"
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            flutter build web --release \
+              --dart-define=SUPABASE_URL="${{ secrets.WEB_SUPABASE_URL }}" \
+              --dart-define=SUPABASE_ANON_KEY="${{ secrets.WEB_SUPABASE_ANON_KEY }}" \
+              --base-href "/${{ github.event.repository.name }}/"
+          else
+            flutter build web --release \
+              --dart-define=SUPABASE_URL="${{ secrets.WEB_SUPABASE_URL }}" \
+              --dart-define=SUPABASE_ANON_KEY="${{ secrets.WEB_SUPABASE_ANON_KEY }}" \
+              --base-href "/${{ github.event.repository.name }}/staging/"
+          fi
+
+      # 🚀 Step B: Deploy to the correct destination folder on the gh-pages branch
+      - name: Deploy to GitHub Pages Branch
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: build/web
+          branch: gh-pages
+          # target-folder leaves root files untouched when pushing staging updates
+          target-folder: ${{ github.ref_name == 'main' && '' || 'staging' }}
+          clean: ${{ github.ref_name == 'main' && 'true' || 'false' }}
