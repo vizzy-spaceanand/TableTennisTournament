@@ -2,7 +2,7 @@ name: Multi-Environment Full-Stack Pipeline
 
 on:
   push:
-    branches: [ main, develop ] # 🔥 Triggers on both production (main) and staging (develop)
+    branches: [ main, develop ]
 
 permissions:
   contents: write
@@ -13,10 +13,9 @@ jobs:
   # 🗄️ JOB 1: Dynamic Database Migration Synchronization
   deploy-backend:
     runs-on: ubuntu-latest
-    # 🧠 DYNAMIC SWITCH: If branch is main -> loads 'production' vault. Otherwise -> loads 'staging' vault.
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
-      - uses: actions/actions/checkout@v4
+      - uses: actions/checkout@v4 # 🔥 FIXED: Removed the accidental extra "actions/"
 
       - uses: supabase/setup-cli@v2
         with:
@@ -28,7 +27,7 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
-  # 💻 JOB 2: Dynamic Frontend Build (Runs only if you re-enable Pages hosting)
+  # 💻 JOB 2: Dynamic Frontend Build
   deploy-frontend:
     needs: deploy-backend
     runs-on: ubuntu-latest
