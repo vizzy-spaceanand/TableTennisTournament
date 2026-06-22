@@ -10,6 +10,7 @@ permissions:
   id-token: write
 
 jobs:
+  # 🗄️ JOB 1: Dynamic Database Migration Synchronization
   deploy-backend:
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
@@ -19,14 +20,15 @@ jobs:
       - uses: supabase/setup-cli@v2
         with:
           version: latest
+          github-token: ${{ github.token }} # 🔥 THE FIX: Bypasses anonymous GitHub API rate limits!
 
       - name: Deploy Database Migrations
-        # 🔥 THE FIX: Explicitly forcing the environment-scoped project ID mapping
         run: supabase db push --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
+  # 💻 JOB 2: Dynamic Frontend Build
   deploy-frontend:
     needs: deploy-backend
     runs-on: ubuntu-latest
