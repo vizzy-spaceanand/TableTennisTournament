@@ -1,8 +1,8 @@
-name: Full-Stack Multi-Environment CI/CD Pipeline
+name: Multi-Environment Full-Stack Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ] # 🔥 Triggers on both production (main) and staging (develop)
 
 permissions:
   contents: write
@@ -10,12 +10,13 @@ permissions:
   id-token: write
 
 jobs:
-  # 🗄️ JOB 1: Deploy Database Migrations to Web Supabase
+  # 🗄️ JOB 1: Dynamic Database Migration Synchronization
   deploy-backend:
     runs-on: ubuntu-latest
-    environment: production # Mounts your protected GitHub environment vault
+    # 🧠 DYNAMIC SWITCH: If branch is main -> loads 'production' vault. Otherwise -> loads 'staging' vault.
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/actions/checkout@v4
 
       - uses: supabase/setup-cli@v2
         with:
@@ -27,11 +28,11 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
-  # 💻 JOB 2: Inject Live Environment Keys & Build Flutter Frontend
+  # 💻 JOB 2: Dynamic Frontend Build (Runs only if you re-enable Pages hosting)
   deploy-frontend:
-    needs: deploy-backend # Wait for backend tracking to safely complete first
+    needs: deploy-backend
     runs-on: ubuntu-latest
-    environment: production # Mounts frontend configuration secrets as well
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,16 +45,10 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Compile Production Web Assets with Dynamic Environment Defines
+      - name: Compile Web Assets
         run: |
           flutter pub get
           flutter build web --release \
             --dart-define=SUPABASE_URL="${{ secrets.WEB_SUPABASE_URL }}" \
             --dart-define=SUPABASE_ANON_KEY="${{ secrets.WEB_SUPABASE_ANON_KEY }}" \
             --base-href "/${{ github.event.repository.name }}/"
-
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          folder: build/web
-          branch: gh-pages
