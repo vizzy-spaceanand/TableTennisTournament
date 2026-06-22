@@ -1,8 +1,8 @@
-name: Full-Stack CI/CD Pipeline
+name: Full-Stack Multi-Environment CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ] # Fires automatically whenever you commit or merge into main
+    branches: [ main ]
 
 permissions:
   contents: write
@@ -10,9 +10,10 @@ permissions:
   id-token: write
 
 jobs:
-  # JOB 1: Backend Database Synchronization
+  # 🗄️ JOB 1: Deploy Database Migrations to Web Supabase
   deploy-backend:
     runs-on: ubuntu-latest
+    environment: production # Mounts your protected GitHub environment vault
     steps:
       - uses: actions/checkout@v4
 
@@ -20,16 +21,17 @@ jobs:
         with:
           version: latest
 
-      - name: Deploy Database Migrations to Supabase
+      - name: Deploy Database Migrations
         run: supabase db push
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
-  # JOB 2: Flutter Web Build and Hosting Deployment
+  # 💻 JOB 2: Inject Live Environment Keys & Build Flutter Frontend
   deploy-frontend:
-    needs: deploy-backend # Ensures backend migrations run successfully first!
+    needs: deploy-backend # Wait for backend tracking to safely complete first
     runs-on: ubuntu-latest
+    environment: production # Mounts frontend configuration secrets as well
     steps:
       - uses: actions/checkout@v4
 
@@ -42,12 +44,15 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Build Flutter Web App
+      - name: Compile Production Web Assets with Dynamic Environment Defines
         run: |
           flutter pub get
-          flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+          flutter build web --release \
+            --dart-define=SUPABASE_URL="${{ secrets.WEB_SUPABASE_URL }}" \
+            --dart-define=SUPABASE_ANON_KEY="${{ secrets.WEB_SUPABASE_ANON_KEY }}" \
+            --base-href "/${{ github.event.repository.name }}/"
 
-      - name: Deploy Static Web Assets to GitHub Pages
+      - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: build/web
