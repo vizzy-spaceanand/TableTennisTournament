@@ -1,8 +1,8 @@
-name: Full-Stack Multi-Environment CI/CD Pipeline
+name: Multi-Environment Full-Stack Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
 
 permissions:
   contents: write
@@ -10,16 +10,22 @@ permissions:
   id-token: write
 
 jobs:
-  # 🗄️ JOB 1: Deploy Database Migrations to Web Supabase
+  # 🗄️ JOB 1: Dynamic Database Migration Synchronization
   deploy-backend:
     runs-on: ubuntu-latest
-    environment: production # Mounts your protected GitHub environment vault
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: supabase/setup-cli@v2
         with:
           version: latest
+          github-token: ${{ github.token }}
+
+      - name: Link to Remote Supabase Project
+        run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_ID }} -p ${{ secrets.SUPABASE_DB_PASSWORD }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Deploy Database Migrations
         run: supabase db push
@@ -27,11 +33,11 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
-  # 💻 JOB 2: Inject Live Environment Keys & Build Flutter Frontend
+  # 💻 JOB 2: Dynamic Frontend Build with Subdirectory Routing
   deploy-frontend:
-    needs: deploy-backend # Wait for backend tracking to safely complete first
+    needs: deploy-backend
     runs-on: ubuntu-latest
-    environment: production # Mounts frontend configuration secrets as well
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,16 +50,30 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Compile Production Web Assets with Dynamic Environment Defines
+      # 🧠 Step A: Build Production (Root path) vs Staging (Subfolder path)
+      # Notice the different --base-href injection based on the branch name!
+      # We append a trailing slash to the staging path so Flutter resolves routing correctly.
+      - name: Compile Web Assets
         run: |
           flutter pub get
-          flutter build web --release \
-            --dart-define=SUPABASE_URL="${{ secrets.WEB_SUPABASE_URL }}" \
-            --dart-define=SUPABASE_ANON_KEY="${{ secrets.WEB_SUPABASE_ANON_KEY }}" \
-            --base-href "/${{ github.event.repository.name }}/"
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            flutter build web --release \
+              --dart-define=SUPABASE_URL="${{ secrets.WEB_SUPABASE_URL }}" \
+              --dart-define=SUPABASE_ANON_KEY="${{ secrets.WEB_SUPABASE_ANON_KEY }}" \
+              --base-href "/${{ github.event.repository.name }}/"
+          else
+            flutter build web --release \
+              --dart-define=SUPABASE_URL="${{ secrets.WEB_SUPABASE_URL }}" \
+              --dart-define=SUPABASE_ANON_KEY="${{ secrets.WEB_SUPABASE_ANON_KEY }}" \
+              --base-href "/${{ github.event.repository.name }}/staging/"
+          fi
 
-      - name: Deploy to GitHub Pages
+      # 🚀 Step B: Deploy to the correct destination folder on the gh-pages branch
+      - name: Deploy to GitHub Pages Branch
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: build/web
           branch: gh-pages
+          # target-folder leaves root files untouched when pushing staging updates
+          target-folder: ${{ github.ref_name == 'main' && '' || 'staging' }}
+          clean: ${{ github.ref_name == 'main' && 'true' || 'false' }}
