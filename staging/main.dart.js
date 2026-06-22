@@ -27911,7 +27911,7 @@ var $async$ayf=A.J(function(a,b){if(a===1)return A.F(b,r)
 for(;;)switch(s){case 0:if($.Y==null)A.all()
 $.Y.toString
 s=2
-return A.C(A.ajj("sb_publishable_VbzivuYM_ccJjLveRYJu9w_8GHx7M_H","https://meyzqqmpmrqlaubxcstq.supabase.co"),$async$ayf)
+return A.C(A.ajj("sb_publishable_LqyLWnvs0x6PMVC20eI6vA_bY3M_76A","https://xjgsizuvuywymhiswvoe.supabase.co"),$async$ayf)
 case 2:if($.Y==null)A.all()
 q=$.Y
 q.toString
