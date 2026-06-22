@@ -20,10 +20,17 @@ jobs:
       - uses: supabase/setup-cli@v2
         with:
           version: latest
-          github-token: ${{ github.token }} # 🔥 THE FIX: Bypasses anonymous GitHub API rate limits!
+          github-token: ${{ github.token }}
 
+      # 🔗 Step A: Bind the runner to the specific environment's project ID
+      - name: Link to Remote Supabase Project
+        run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_ID }} -p ${{ secrets.SUPABASE_DB_PASSWORD }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # 🚀 Step B: Securely push the DDL migrations forward
       - name: Deploy Database Migrations
-        run: supabase db push --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: supabase db push
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
