@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'player_registration_screen.dart';
+import '../services/standings_engine.dart';
 
 class TournamentDetailsScreen extends StatefulWidget {
   final String tournamentId;
@@ -60,6 +61,65 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> {
     }
   }
 
+  // --- ℹ️ INTERACTIVE "WHITE BOX" TIE-BREAKER INSPECTOR MODAL ---
+  void _showTieBreakerInspector(String groupName, Map<String, dynamic> auditData) {
+    final List<dynamic> steps = auditData['steps'] ?? [];
+    final Map<dynamic, dynamic> ratios = auditData['ratios'] ?? {};
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.psychology, color: Colors.deepOrange), // ✅ FIXED: Replaced character with standard enum
+            const SizedBox(width: 10),
+            Text('$groupName Math Audit Trail', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('ITTF Isolation Calculation Steps:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                const SizedBox(height: 8),
+                if (steps.isEmpty)
+                  const Text('No ties detected at this score boundary. Sorted naturally via basic Match Points.', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey))
+                else
+                  ...steps.map((step) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('• ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                            Expanded(child: Text(step.toString(), style: const TextStyle(fontSize: 13))),
+                          ],
+                        ),
+                      )),
+                const Divider(height: 24),
+                const Text('Computed Performance Metrics Ratio Map:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                const SizedBox(height: 8),
+                ...ratios.entries.map((entry) => Card(
+                      color: Colors.grey[50],
+                      margin: const EdgeInsets.only(bottom: 6),
+                      child: ListTile(
+                        dense: true,
+                        title: Text(entry.key.toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text(entry.value.toString(), style: TextStyle(color: Colors.grey[800], fontFamily: 'monospace')),
+                      ),
+                    )),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Dismiss Monitor')),
+        ],
+      ),
+    );
+  }
+
   // --- SCORE LOGGING MODAL WITH FRONT-FACING DIALOG VALIDATION BANNER ---
   Future<void> _showScoreLoggingModal(Map<String, dynamic> matchRow) async {
     final String stage = matchRow['stage'] ?? 'group';
@@ -80,7 +140,6 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> {
       builder: (context) {
         String? modalError;
 
-        // ✅ FIXED: Encloses the ENTIRE dialog so setModalState is shared across components
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AlertDialog(
@@ -164,7 +223,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> {
                             Expanded(
                               child: TextField(
                                 controller: p1PointControllers[i],
-                                keyboardType: TextInputType.number, // ✅ FIXED
+                                keyboardType: TextInputType.number,
                                 textAlign: TextAlign.center,
                                 decoration: const InputDecoration(hintText: '0', border: OutlineInputBorder(), contentPadding: EdgeInsets.zero),
                               ),
@@ -173,8 +232,8 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> {
                             Expanded(
                               child: TextField(
                                 controller: p2PointControllers[i],
-                                keyboardType: TextInputType.number, // ✅ FIXED
-                                textAlign: TextAlign.center, // ✅ FIXED
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
                                 decoration: const InputDecoration(hintText: '0', border: OutlineInputBorder(), contentPadding: EdgeInsets.zero),
                               ),
                             ),
@@ -337,8 +396,15 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final standingsResult = StandingsEngine.generateGroupStandings(
+      players: _players,
+      matches: _matches,
+    );
+    final leaderboards = standingsResult['leaderboards'] as Map<String, List<Map<String, dynamic>>>;
+    final auditTrails = standingsResult['audit_trails'] as Map<String, Map<String, dynamic>>;
+
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.tournamentName),
@@ -346,6 +412,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> {
             tabs: [
               Tab(icon: Icon(Icons.people), text: "Roster Management"),
               Tab(icon: Icon(Icons.sports_tennis), text: "Match Fixtures"),
+              Tab(icon: Icon(Icons.analytics), text: "Group Standings"),
             ],
           ),
         ),
@@ -415,7 +482,6 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> {
                                             const SizedBox(width: 4),
                                             PopupMenuButton<String>(
                                               onSelected: (action) {
-                                                // ✅ FIXED: Routes to appropriate operations conditional on label choices
                                                 if (action == 'edit') {
                                                   _updatePlayerInDatabase(player['id'], currentName, currentTier, currentGroup);
                                                 } else if (action == 'delete') {
@@ -529,6 +595,87 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> {
                         ),
                       ],
                     ),
+
+                    // --- TAB 3: LIVE LEADERBOARD ---
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Live Group Rankings', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        const Text('Rankings adjust in real-time as match points and set margins are logged.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                        const Divider(),
+                        Expanded(
+                          child: leaderboards.isEmpty
+                              ? const Center(child: Text('No active group mappings compiled. Add players to groups to initiate leaderboards!'))
+                              : ListView.builder(
+                                  itemCount: leaderboards.keys.length,
+                                  itemBuilder: (context, groupIndex) {
+                                    final String groupName = leaderboards.keys.elementAt(groupIndex);
+                                    final List<Map<String, dynamic>> groupRankings = leaderboards[groupName]!;
+                                    final Map<String, dynamic> auditTrail = auditTrails[groupName] ?? {'steps': [], 'ratios': {}};
+
+                                    return Card(
+                                      margin: const EdgeInsets.only(bottom: 20),
+                                      elevation: 2,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                            decoration: BoxDecoration(color: Colors.deepOrange.shade50, borderRadius: const BorderRadius.only(topLeft: Radius.circular(4), topRight: Radius.circular(4))),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text(groupName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange)),
+                                                TextButton.icon(
+                                                  onPressed: () => _showTieBreakerInspector(groupName, auditTrail),
+                                                  icon: const Icon(Icons.insights, size: 16, color: Colors.deepOrange),
+                                                  label: const Text('Tie-Breaker Logic', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          
+                                          DataTable(
+                                            columnSpacing: 18,
+                                            headingRowHeight: 40,
+                                            columns: const [
+                                              DataColumn(label: Text('Rank', style: TextStyle(fontWeight: FontWeight.bold))),
+                                              DataColumn(label: Text('Player Name', style: TextStyle(fontWeight: FontWeight.bold))),
+                                              DataColumn(label: Text('MP', style: TextStyle(fontWeight: FontWeight.bold))),
+                                              DataColumn(label: Text('W - L', style: TextStyle(fontWeight: FontWeight.bold))),
+                                            ],
+                                            rows: groupRankings.map((playerRow) {
+                                              final int currentRank = playerRow['rank'] as int;
+                                              
+                                              return DataRow(
+                                                color: WidgetStateProperty.resolveWith<Color?>((states) {
+                                                  // ✅ FIXED: Updated to standard precision-safe color constructor format
+                                                  if (currentRank <= 2) return Colors.green.withValues(alpha: 0.03); 
+                                                  return null;
+                                                }),
+                                                cells: [
+                                                  DataCell(
+                                                    CircleAvatar(
+                                                      radius: 11,
+                                                      backgroundColor: currentRank <= 2 ? Colors.green : Colors.grey[300],
+                                                      child: Text(currentRank.toString(), style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
+                                                    ),
+                                                  ),
+                                                  DataCell(Text(playerRow['name'].toString(), style: const TextStyle(fontWeight: FontWeight.w600))),
+                                                  DataCell(Text(playerRow['match_points'].toString(), style: const TextStyle(fontWeight: FontWeight.bold))),
+                                                  DataCell(Text(playerRow['w_l'].toString())),
+                                                ],
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -556,7 +703,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> {
                     TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Player Name')),
                     const SizedBox(height: 15),
                     DropdownButtonFormField<String>(
-                      initialValue: selectedTier,
+                      initialValue: selectedTier, // ✅ FIXED: Swapped 'value' for 'initialValue'
                       decoration: const InputDecoration(labelText: 'Skill Tier'),
                       items: const [
                         DropdownMenuItem(value: 'Beginner', child: Text('Beginner Tier')),
@@ -567,7 +714,7 @@ class _TournamentDetailsScreenState extends State<TournamentDetailsScreen> {
                     ),
                     const SizedBox(height: 15),
                     DropdownButtonFormField<String>(
-                      initialValue: selectedGroup,
+                      initialValue: selectedGroup, // ✅ FIXED: Swapped 'value' for 'initialValue'
                       decoration: const InputDecoration(labelText: 'Group Bracket Pool'),
                       items: const [
                         DropdownMenuItem(value: 'Group A', child: Text('Group A Pool')),
