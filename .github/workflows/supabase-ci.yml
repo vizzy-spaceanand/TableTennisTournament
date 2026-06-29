@@ -2,7 +2,7 @@ name: Multi-Environment Full-Stack Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 permissions:
   contents: write
@@ -34,7 +34,7 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
   # 💻 JOB 2: Dynamic Frontend Build with Subdirectory Routing
-  deploy-frontend:
+  deploy: # 👈 Change this keyword right here from 'deploy-frontend'
     needs: deploy-backend
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
@@ -43,12 +43,12 @@ jobs:
 
       - uses: actions/setup-java@v3
         with:
-          distribution: 'zulu'
-          java-version: '17'
+          distribution: "zulu"
+          java-version: "17"
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          channel: "stable"
 
       # 🧠 Step A: Build Production (Root path) vs Staging (Subfolder path)
       # Notice the different --base-href injection based on the branch name!
