@@ -57,7 +57,7 @@ jobs:
             flutter build web --release \
               --dart-define=SUPABASE_URL="${{ secrets.WEB_SUPABASE_URL }}" \
               --dart-define=SUPABASE_ANON_KEY="${{ secrets.WEB_SUPABASE_ANON_KEY }}" \
-              --base-href "/${{ github.event.repository.name }}/"
+              --base-href "/${{ github.event.repository.name }}/prod/"
           else
             flutter build web --release \
               --dart-define=SUPABASE_URL="${{ secrets.WEB_SUPABASE_URL }}" \
@@ -65,13 +65,14 @@ jobs:
               --base-href "/${{ github.event.repository.name }}/staging/"
           fi
 
+      # ✅ FIX: Both environments deploy into their own named subfolder.
+      # Neither deploy sets clean:true, so they can never overwrite each other.
       - name: Deploy to GitHub Pages Branch
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: build/web
           branch: gh-pages
-          target-folder: ${{ github.ref_name == 'main' && '' || 'staging' }}
-          clean: ${{ github.ref_name == 'main' && 'true' || 'false' }}
-          # 🛡️ DEFENSIVE GUARD: Prevents the production build from erasing the staging deployment subfolder
-          clean-exclude: |
-            staging
+          target-folder: ${{ github.ref_name == 'main' && 'prod' || 'staging' }}
+          clean: true
+          # clean:true only cleans the target-folder itself (prod/ or staging/),
+          # NOT the entire gh-pages root — so each env is fully isolated.
