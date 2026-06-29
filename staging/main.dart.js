@@ -28315,7 +28315,7 @@ var $async$aAR=A.J(function(a,b){if(a===1)return A.F(b,r)
 for(;;)switch(s){case 0:if($.a1==null)A.anD()
 $.a1.toString
 s=2
-return A.D(A.alu("sb_publishable_VbzivuYM_ccJjLveRYJu9w_8GHx7M_H","https://meyzqqmpmrqlaubxcstq.supabase.co"),$async$aAR)
+return A.D(A.alu("sb_publishable_LqyLWnvs0x6PMVC20eI6vA_bY3M_76A","https://xjgsizuvuywymhiswvoe.supabase.co"),$async$aAR)
 case 2:if($.a1==null)A.anD()
 q=$.a1
 q.toString
