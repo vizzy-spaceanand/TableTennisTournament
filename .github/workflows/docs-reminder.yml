@@ -1,0 +1,67 @@
+name: Docs Reminder
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  check-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if docs need updating
+        run: |
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          NEEDS_SCHEMA=false
+          NEEDS_RBAC=false
+          NEEDS_API=false
+          DOCS_UPDATED=false
+
+          # Check if schema-related files changed
+          if echo "$CHANGED" | grep -qE "supabase/migrations/|supabase/config.toml"; then
+            NEEDS_SCHEMA=true
+          fi
+
+          # Check if RBAC-related files changed
+          if echo "$CHANGED" | grep -qE "supabase/migrations/|lib/services/"; then
+            NEEDS_RBAC=true
+          fi
+
+          # Check if API contract should be updated
+          if echo "$CHANGED" | grep -qE "lib/screens/|lib/services/"; then
+            NEEDS_API=true
+          fi
+
+          # Check if any docs were updated
+          if echo "$CHANGED" | grep -q "^docs/"; then
+            DOCS_UPDATED=true
+          fi
+
+          # Warn if docs likely need updating but weren't touched
+          WARNINGS=""
+
+          if [ "$NEEDS_SCHEMA" = "true" ] && [ "$DOCS_UPDATED" = "false" ]; then
+            WARNINGS="$WARNINGS\n⚠️  Migration files changed — consider updating docs/Schema.md"
+          fi
+
+          if [ "$NEEDS_RBAC" = "true" ] && [ "$DOCS_UPDATED" = "false" ]; then
+            WARNINGS="$WARNINGS\n⚠️  Service or migration files changed — consider updating docs/RBAC.md"
+          fi
+
+          if [ "$NEEDS_API" = "true" ] && [ "$DOCS_UPDATED" = "false" ]; then
+            WARNINGS="$WARNINGS\n⚠️  Screen or service files changed — consider updating docs/API-Contract.md"
+          fi
+
+          if [ -n "$WARNINGS" ]; then
+            echo -e "\n$WARNINGS\n"
+            echo "::warning::Some docs may need updating. See warnings above."
+            # Warning only — does not fail the build
+          else
+            echo "✅ Docs check passed."
+          fi
