@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/auth_guard.dart';
 
 class PlayerRegistrationScreen extends StatefulWidget {
   final String tournamentId;
@@ -23,6 +24,7 @@ class _PlayerRegistrationScreenState extends State<PlayerRegistrationScreen> {
   bool _isLoading = false;
 
   Future<void> _registerPlayerToPostgres() async {
+    if (!await requireAuth(context)) return; 
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 

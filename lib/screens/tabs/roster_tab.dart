@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../player_registration_screen.dart';
+import '../../utils/auth_guard.dart';
 
 class RosterTab extends StatelessWidget {
   final String tournamentId;
@@ -138,6 +139,8 @@ class RosterTab extends StatelessWidget {
             const Text('Registered Roster', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             ElevatedButton.icon(
               onPressed: () async {
+                if (!await requireAuth(context)) return;
+                if (!context.mounted) return;
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -149,9 +152,14 @@ class RosterTab extends StatelessWidget {
                 );
                 onRefreshRequired();
               },
-              icon: const Icon(Icons.add),
+              icon: Icon(
+                Supabase.instance.client.auth.currentUser != null ? Icons.add : Icons.lock_outline,
+              ),
               label: const Text('Add Player'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Supabase.instance.client.auth.currentUser != null ? Colors.blueAccent : Colors.grey,
+                foregroundColor: Colors.white,
+              ),
             ),
           ],
         ),
@@ -186,19 +194,20 @@ class RosterTab extends StatelessWidget {
                               side: BorderSide(color: Colors.blue.shade100),
                             ),
                             const SizedBox(width: 4),
-                            PopupMenuButton<String>(
-                              onSelected: (action) {
-                                if (action == 'edit') {
-                                  _updatePlayerInDatabase(context, player['id'], currentName, currentTier, currentGroup);
-                                } else if (action == 'delete') {
-                                  _deletePlayerFromDatabase(context, player['id'], currentName);
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit Player / Group Pool')])),
-                                const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 18), SizedBox(width: 8), Text('Delete Profile', style: TextStyle(color: Colors.red))])),
-                              ],
-                            ),
+                            if (Supabase.instance.client.auth.currentUser != null)
+                              PopupMenuButton<String>(
+                                onSelected: (action) {
+                                  if (action == 'edit') {
+                                    _updatePlayerInDatabase(context, player['id'], currentName, currentTier, currentGroup);
+                                  } else if (action == 'delete') {
+                                    _deletePlayerFromDatabase(context, player['id'], currentName);
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit Player / Group Pool')])),
+                                  const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 18), SizedBox(width: 8), Text('Delete Profile', style: TextStyle(color: Colors.red))])),
+                                ],
+                              ),
                           ],
                         ),
                       ),

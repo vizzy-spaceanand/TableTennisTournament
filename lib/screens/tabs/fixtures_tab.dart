@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/standings_engine.dart';
 import '../../services/bracket_engine.dart';
+import '../../utils/auth_guard.dart';
 
 class FixturesTab extends StatefulWidget {
   final String tournamentId;
@@ -31,8 +32,11 @@ class FixturesTab extends StatefulWidget {
 
 class _FixturesTabState extends State<FixturesTab> {
   String _activeViewMode = 'list';
+  // 👇 ADD THIS — single source of truth for "is the user logged in"
+  bool get _isLoggedIn => Supabase.instance.client.auth.currentUser != null;
 
-  Future<void> _generateRoundRobinFixtures(BuildContext context) async {
+   Future<void> _generateRoundRobinFixtures(BuildContext context) async {
+    if (!await requireAuth(context)) return;
     try {
       final players = await Supabase.instance.client
           .from('players')
@@ -59,8 +63,10 @@ class _FixturesTabState extends State<FixturesTab> {
                 'tournament_id': widget.tournamentId,
                 'player1_id': groupPlayers[i]['id'],
                 'player2_id': groupPlayers[j]['id'],
-                'player1_name_fallback': '${groupPlayers[i]['name']} ($groupName)',
-                'player2_name_fallback': '${groupPlayers[j]['name']} ($groupName)',
+                'player1_name_fallback':
+                    '${groupPlayers[i]['name']} ($groupName)',
+                'player2_name_fallback':
+                    '${groupPlayers[j]['name']} ($groupName)',
                 'status': 'scheduled',
                 'stage': 'group',
               });
@@ -78,19 +84,33 @@ class _FixturesTabState extends State<FixturesTab> {
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Engine Guard: $error'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Engine Guard: $error'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
   }
 
-  Future<void> _showScoreLoggingModal(BuildContext context, Map<String, dynamic> matchRow) async {
+  Future<void> _showScoreLoggingModal(
+    BuildContext context,
+    Map<String, dynamic> matchRow,
+  ) async {
     final String stage = matchRow['stage'] ?? 'group';
-    final int maxBestOfFormat = (stage == 'group') ? widget.roundRobinSets : widget.knockoutSets;
+    final int maxBestOfFormat = (stage == 'group')
+        ? widget.roundRobinSets
+        : widget.knockoutSets;
     final int setsRequiredToWin = (maxBestOfFormat / 2).floor() + 1;
 
-    List<TextEditingController> p1PointControllers = List.generate(maxBestOfFormat, (_) => TextEditingController());
-    List<TextEditingController> p2PointControllers = List.generate(maxBestOfFormat, (_) => TextEditingController());
+    List<TextEditingController> p1PointControllers = List.generate(
+      maxBestOfFormat,
+      (_) => TextEditingController(),
+    );
+    List<TextEditingController> p2PointControllers = List.generate(
+      maxBestOfFormat,
+      (_) => TextEditingController(),
+    );
 
     final existingSets = matchRow['set_scores'] as List<dynamic>? ?? [];
     for (int i = 0; i < existingSets.length && i < maxBestOfFormat; i++) {
@@ -109,8 +129,17 @@ class _FixturesTabState extends State<FixturesTab> {
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(widget.tournamentName, style: const TextStyle(fontSize: 14, color: Colors.grey)),
-                  Text('Log Set Points (Best of $maxBestOfFormat)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text(
+                    widget.tournamentName,
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                  Text(
+                    'Log Set Points (Best of $maxBestOfFormat)',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
                 ],
               ),
               content: SingleChildScrollView(
@@ -129,10 +158,21 @@ class _FixturesTabState extends State<FixturesTab> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.red,
+                              size: 20,
+                            ),
                             const SizedBox(width: 10),
                             Expanded(
-                              child: Text(modalError!, style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.bold)),
+                              child: Text(
+                                modalError!,
+                                style: const TextStyle(
+                                  color: Colors.red,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -142,31 +182,46 @@ class _FixturesTabState extends State<FixturesTab> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       width: double.infinity,
-                      decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(8)),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       child: Text(
                         '📋 Target win threshold: First to $setsRequiredToWin sets. Minimum 11 points per set with a 2-point clear margin.',
-                        style: const TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.w600),
+                        style: const TextStyle(
+                          color: Colors.blueAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                     ),
                     const SizedBox(height: 20),
-                    
+
                     Row(
                       children: [
                         const Expanded(child: SizedBox()),
                         Expanded(
                           child: Text(
-                            matchRow['player1_name_fallback']?.split(' (')[0] ?? 'Player 1',
+                            matchRow['player1_name_fallback']?.split(' (')[0] ??
+                                'Player 1',
                             textAlign: TextAlign.center,
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.deepOrange,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            matchRow['player2_name_fallback']?.split(' (')[0] ?? 'Player 2',
+                            matchRow['player2_name_fallback']?.split(' (')[0] ??
+                                'Player 2',
                             textAlign: TextAlign.center,
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blueAccent,
+                            ),
                           ),
                         ),
                       ],
@@ -178,23 +233,39 @@ class _FixturesTabState extends State<FixturesTab> {
                         padding: const EdgeInsets.symmetric(vertical: 6.0),
                         child: Row(
                           children: [
-                            Text('Set ${i + 1}:', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text(
+                              'Set ${i + 1}:',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             const SizedBox(width: 15),
                             Expanded(
                               child: TextField(
                                 controller: p1PointControllers[i],
                                 keyboardType: TextInputType.number,
                                 textAlign: TextAlign.center,
-                                decoration: const InputDecoration(hintText: '0', border: OutlineInputBorder(), contentPadding: EdgeInsets.zero),
+                                decoration: const InputDecoration(
+                                  hintText: '0',
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.zero,
+                                ),
                               ),
                             ),
-                            const Padding(padding: EdgeInsets.symmetric(horizontal: 8.0), child: Text('-')),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 8.0),
+                              child: Text('-'),
+                            ),
                             Expanded(
                               child: TextField(
                                 controller: p2PointControllers[i],
                                 keyboardType: TextInputType.number,
                                 textAlign: TextAlign.center,
-                                decoration: const InputDecoration(hintText: '0', border: OutlineInputBorder(), contentPadding: EdgeInsets.zero),
+                                decoration: const InputDecoration(
+                                  hintText: '0',
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.zero,
+                                ),
                               ),
                             ),
                           ],
@@ -207,11 +278,14 @@ class _FixturesTabState extends State<FixturesTab> {
                 TextButton(
                   onPressed: () {
                     Navigator.pop(context);
-                  }, 
+                  },
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
                   onPressed: () async {
                     int computedP1SetsWon = 0;
                     int computedP2SetsWon = 0;
@@ -230,26 +304,36 @@ class _FixturesTabState extends State<FixturesTab> {
                       int? pts1 = int.tryParse(t1);
                       int? pts2 = int.tryParse(t2);
 
-                      if (pts1 == null || pts2 == null || pts1 < 0 || pts2 < 0) {
+                      if (pts1 == null ||
+                          pts2 == null ||
+                          pts1 < 0 ||
+                          pts2 < 0) {
                         setModalState(() {
-                          modalError = 'Set ${i + 1} fields require positive numeric scores.';
+                          modalError =
+                              'Set ${i + 1} fields require positive numeric scores.';
                         });
                         return;
                       }
 
                       if (p1HasMathematicallyWon || p2HasMathematicallyWon) {
                         setModalState(() {
-                          modalError = 'Impossible Score! Set ${i + 1} cannot contain data entries.';
+                          modalError =
+                              'Impossible Score! Set ${i + 1} cannot contain data entries.';
                         });
                         return;
                       }
 
-                      bool isP1Win = (pts1 == 11 && pts2 <= 9) || (pts1 > 11 && (pts1 - pts2 == 2));
-                      bool isP2Win = (pts2 == 11 && pts1 <= 9) || (pts2 > 11 && (pts2 - pts1 == 2));
+                      bool isP1Win =
+                          (pts1 == 11 && pts2 <= 9) ||
+                          (pts1 > 11 && (pts1 - pts2 == 2));
+                      bool isP2Win =
+                          (pts2 == 11 && pts1 <= 9) ||
+                          (pts2 > 11 && (pts2 - pts1 == 2));
 
                       if (!isP1Win && !isP2Win) {
                         setModalState(() {
-                          modalError = 'Set ${i + 1} score ($pts1-$pts2) is invalid. Must clear by 2.';
+                          modalError =
+                              'Set ${i + 1} score ($pts1-$pts2) is invalid. Must clear by 2.';
                         });
                         return;
                       }
@@ -270,7 +354,8 @@ class _FixturesTabState extends State<FixturesTab> {
                       }
                     }
 
-                    if (computedP1SetsWon != setsRequiredToWin && computedP2SetsWon != setsRequiredToWin) {
+                    if (computedP1SetsWon != setsRequiredToWin &&
+                        computedP2SetsWon != setsRequiredToWin) {
                       setModalState(() {
                         modalError = 'Match is uncompleted!';
                       });
@@ -278,22 +363,31 @@ class _FixturesTabState extends State<FixturesTab> {
                     }
 
                     try {
-                      final String winnerId = (computedP1SetsWon > computedP2SetsWon) 
-                          ? matchRow['player1_id'].toString() 
+                      final String winnerId =
+                          (computedP1SetsWon > computedP2SetsWon)
+                          ? matchRow['player1_id'].toString()
                           : matchRow['player2_id'].toString();
 
-                      await Supabase.instance.client.from('matches').update({
-                        'player1_score': computedP1SetsWon,
-                        'player2_score': computedP2SetsWon,
-                        'status': 'completed',
-                        'winner_id': winnerId,
-                        'set_scores': calculatedSetsJson,
-                      }).eq('id', matchRow['id']);
+                      await Supabase.instance.client
+                          .from('matches')
+                          .update({
+                            'player1_score': computedP1SetsWon,
+                            'player2_score': computedP2SetsWon,
+                            'status': 'completed',
+                            'winner_id': winnerId,
+                            'set_scores': calculatedSetsJson,
+                          })
+                          .eq('id', matchRow['id']);
 
                       if (context.mounted) {
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('🎯 Match Result Calculated & Persisted!'), backgroundColor: Colors.green),
+                          const SnackBar(
+                            content: Text(
+                              '🎯 Match Result Calculated & Persisted!',
+                            ),
+                            backgroundColor: Colors.green,
+                          ),
                         );
                       }
                     } catch (error) {
@@ -314,8 +408,10 @@ class _FixturesTabState extends State<FixturesTab> {
   }
 
   Widget _buildBracketNodeCard(Map<String, dynamic> match) {
-    final String p1Name = match['player1_name_fallback']?.split(' (')[0] ?? 'TBD';
-    final String p2Name = match['player2_name_fallback']?.split(' (')[0] ?? 'TBD';
+    final String p1Name =
+        match['player1_name_fallback']?.split(' (')[0] ?? 'TBD';
+    final String p2Name =
+        match['player2_name_fallback']?.split(' (')[0] ?? 'TBD';
     final bool isCompleted = match['status'] == 'completed';
     final int p1Score = match['player1_score'] ?? 0;
     final int p2Score = match['player2_score'] ?? 0;
@@ -326,7 +422,10 @@ class _FixturesTabState extends State<FixturesTab> {
       child: Card(
         elevation: 3,
         shape: RoundedRectangleBorder(
-          side: BorderSide(color: isCompleted ? Colors.green.shade300 : Colors.grey.shade300, width: 1.5),
+          side: BorderSide(
+            color: isCompleted ? Colors.green.shade300 : Colors.grey.shade300,
+            width: 1.5,
+          ),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
@@ -334,15 +433,35 @@ class _FixturesTabState extends State<FixturesTab> {
             ListTile(
               dense: true,
               visualDensity: VisualDensity.compact,
-              title: Text(p1Name, style: TextStyle(fontWeight: p1Score > p2Score && isCompleted ? FontWeight.bold : FontWeight.normal)),
-              trailing: Text(isCompleted ? p1Score.toString() : '-', style: const TextStyle(fontWeight: FontWeight.bold)),
+              title: Text(
+                p1Name,
+                style: TextStyle(
+                  fontWeight: p1Score > p2Score && isCompleted
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                ),
+              ),
+              trailing: Text(
+                isCompleted ? p1Score.toString() : '-',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
             const Divider(height: 1, indent: 12, endIndent: 12),
             ListTile(
               dense: true,
               visualDensity: VisualDensity.compact,
-              title: Text(p2Name, style: TextStyle(fontWeight: p2Score > p1Score && isCompleted ? FontWeight.bold : FontWeight.normal)),
-              trailing: Text(isCompleted ? p2Score.toString() : '-', style: const TextStyle(fontWeight: FontWeight.bold)),
+              title: Text(
+                p2Name,
+                style: TextStyle(
+                  fontWeight: p2Score > p1Score && isCompleted
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                ),
+              ),
+              trailing: Text(
+                isCompleted ? p2Score.toString() : '-',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
             Container(
               width: double.infinity,
@@ -351,10 +470,19 @@ class _FixturesTabState extends State<FixturesTab> {
                 onPressed: () {
                   _showScoreLoggingModal(context, match);
                 },
-                style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
-                child: Text(isCompleted ? 'Edit Result' : 'Log Score', style: TextStyle(fontSize: 11, color: isCompleted ? Colors.green : Colors.blueAccent)),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                ),
+                child: Text(
+                  isCompleted ? 'Edit Result' : 'Log Score',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isCompleted ? Colors.green : Colors.blueAccent,
+                  ),
+                ),
               ),
-            )
+            ),
           ],
         ),
       ),
@@ -363,37 +491,61 @@ class _FixturesTabState extends State<FixturesTab> {
 
   @override
   Widget build(BuildContext context) {
-    final groupMatches = widget.matches.where((m) => m['stage'] == 'group').toList();
-    final knockoutMatches = widget.matches.where((m) => m['stage'] != 'group').toList();
+    final groupMatches = widget.matches
+        .where((m) => m['stage'] == 'group')
+        .toList();
+    final knockoutMatches = widget.matches
+        .where((m) => m['stage'] != 'group')
+        .toList();
 
     String? latestKnockoutStage;
     bool allLatestRoundCompleted = false;
     bool nextStageExists = false;
 
     if (knockoutMatches.isNotEmpty) {
-      final stagesOrder = ['round_of_32', 'round_of_16', 'quarterfinal', 'semifinal', 'final'];
+      final stagesOrder = [
+        'round_of_32',
+        'round_of_16',
+        'quarterfinal',
+        'semifinal',
+        'final',
+      ];
       for (var stage in stagesOrder) {
         if (knockoutMatches.any((m) => m['stage'] == stage)) {
           latestKnockoutStage = stage;
         }
       }
       if (latestKnockoutStage != null) {
-        final latestMatches = knockoutMatches.where((m) => m['stage'] == latestKnockoutStage).toList();
-        allLatestRoundCompleted = latestMatches.every((m) => m['status'] == 'completed');
-        
+        final latestMatches = knockoutMatches
+            .where((m) => m['stage'] == latestKnockoutStage)
+            .toList();
+        allLatestRoundCompleted = latestMatches.every(
+          (m) => m['status'] == 'completed',
+        );
+
         final int currentIdx = stagesOrder.indexOf(latestKnockoutStage);
         if (currentIdx + 1 < stagesOrder.length) {
           final String nextStageName = stagesOrder[currentIdx + 1];
-          nextStageExists = knockoutMatches.any((m) => m['stage'] == nextStageName);
+          nextStageExists = knockoutMatches.any(
+            (m) => m['stage'] == nextStageName,
+          );
         }
       }
     }
 
     final Map<String, List<Map<String, dynamic>>> bracketRounds = {
-      'Round of 32': knockoutMatches.where((m) => m['stage'] == 'round_of_32').toList(),
-      'Round of 16': knockoutMatches.where((m) => m['stage'] == 'round_of_16').toList(),
-      'Quarterfinals': knockoutMatches.where((m) => m['stage'] == 'quarterfinal').toList(),
-      'Semifinals': knockoutMatches.where((m) => m['stage'] == 'semifinal').toList(),
+      'Round of 32': knockoutMatches
+          .where((m) => m['stage'] == 'round_of_32')
+          .toList(),
+      'Round of 16': knockoutMatches
+          .where((m) => m['stage'] == 'round_of_16')
+          .toList(),
+      'Quarterfinals': knockoutMatches
+          .where((m) => m['stage'] == 'quarterfinal')
+          .toList(),
+      'Semifinals': knockoutMatches
+          .where((m) => m['stage'] == 'semifinal')
+          .toList(),
       'Finals': knockoutMatches.where((m) => m['stage'] == 'final').toList(),
     };
     bracketRounds.removeWhere((key, list) => list.isEmpty);
@@ -407,7 +559,10 @@ class _FixturesTabState extends State<FixturesTab> {
           alignment: WrapAlignment.spaceBetween,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            const Text('Tournament Schedule', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const Text(
+              'Tournament Schedule',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
             Wrap(
               spacing: 12,
               runSpacing: 8,
@@ -416,8 +571,16 @@ class _FixturesTabState extends State<FixturesTab> {
                 if (knockoutMatches.isNotEmpty) ...[
                   SegmentedButton<String>(
                     segments: const [
-                      ButtonSegment(value: 'list', label: Text('Pool Matches'), icon: Icon(Icons.list)),
-                      ButtonSegment(value: 'bracket', label: Text('Elimination Bracket'), icon: Icon(Icons.account_tree)),
+                      ButtonSegment(
+                        value: 'list',
+                        label: Text('Pool Matches'),
+                        icon: Icon(Icons.list),
+                      ),
+                      ButtonSegment(
+                        value: 'bracket',
+                        label: Text('Elimination Bracket'),
+                        icon: Icon(Icons.account_tree),
+                      ),
                     ],
                     selected: {_activeViewMode},
                     onSelectionChanged: (set) {
@@ -425,65 +588,82 @@ class _FixturesTabState extends State<FixturesTab> {
                     },
                   ),
                 ],
-                
-                if (widget.knockoutFormat != 'league_topper' && 
-                    knockoutMatches.isEmpty && 
-                    groupMatches.isNotEmpty && 
+
+                if (widget.knockoutFormat != 'league_topper' &&
+                    knockoutMatches.isEmpty &&
+                    groupMatches.isNotEmpty &&
                     groupMatches.every((m) => m['status'] == 'completed')) ...[
                   ElevatedButton.icon(
                     onPressed: () async {
+                      if (!await requireAuth(context)) return;
                       try {
-                        final standingsResult = StandingsEngine.generateGroupStandings(
-                          players: widget.players,
-                          matches: widget.matches,
-                        );
-                        final knockoutFixtures = BracketEngine.generateInitialKnockoutMatches(
-                          tournamentId: widget.tournamentId,
-                          format: widget.knockoutFormat,
-                          leaderboards: standingsResult['leaderboards'],
-                        );
+                        final standingsResult =
+                            StandingsEngine.generateGroupStandings(
+                              players: widget.players,
+                              matches: widget.matches,
+                            );
+                        final knockoutFixtures =
+                            BracketEngine.generateInitialKnockoutMatches(
+                              tournamentId: widget.tournamentId,
+                              format: widget.knockoutFormat,
+                              leaderboards: standingsResult['leaderboards'],
+                            );
                         if (knockoutFixtures.isNotEmpty) {
-                          await Supabase.instance.client.from('matches').insert(knockoutFixtures);
+                          await Supabase.instance.client
+                              .from('matches')
+                              .insert(knockoutFixtures);
                           widget.onRefreshRequired();
                           setState(() => _activeViewMode = 'bracket');
                         }
                       } catch (e) {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Bracket Error: $e'), backgroundColor: Colors.red),
+                            SnackBar(
+                              content: Text('Bracket Error: $e'),
+                              backgroundColor: Colors.red,
+                            ),
                           );
                         }
                       }
                     },
                     icon: const Icon(Icons.account_tree),
                     label: const Text('Generate Bracket'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepOrange,
+                      foregroundColor: Colors.white,
+                    ),
                   ),
                 ],
 
-                if (latestKnockoutStage != null && 
-                    latestKnockoutStage != 'final' && 
-                    allLatestRoundCompleted && 
+                if (latestKnockoutStage != null &&
+                    latestKnockoutStage != 'final' &&
+                    allLatestRoundCompleted &&
                     !nextStageExists) ...[
                   ElevatedButton.icon(
                     onPressed: () async {
+                      if (!await requireAuth(context)) return;
                       try {
-                        final nextStageFixtures = BracketEngine.generateNextStageMatches(
-                          tournamentId: widget.tournamentId,
-                          currentKnockoutMatches: knockoutMatches,
-                        );
+                        final nextStageFixtures =
+                            BracketEngine.generateNextStageMatches(
+                              tournamentId: widget.tournamentId,
+                              currentKnockoutMatches: knockoutMatches,
+                            );
                         if (nextStageFixtures.isNotEmpty) {
-                          await Supabase.instance.client.from('matches').insert(nextStageFixtures);
+                          await Supabase.instance.client
+                              .from('matches')
+                              .insert(nextStageFixtures);
                           widget.onRefreshRequired();
-                          
+
                           // 🛡️ REPAIRED SYNCHRONIZATION LINT PASS: Check local context mount state with block braces
                           if (!context.mounted) {
                             return;
                           }
-                          
+
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('🏆 Winners Advanced to Next Elimination Tier!'), 
+                              content: Text(
+                                '🏆 Winners Advanced to Next Elimination Tier!',
+                              ),
                               backgroundColor: Colors.purple,
                             ),
                           );
@@ -491,14 +671,20 @@ class _FixturesTabState extends State<FixturesTab> {
                       } catch (e) {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Advancement Error: $e'), backgroundColor: Colors.red),
+                            SnackBar(
+                              content: Text('Advancement Error: $e'),
+                              backgroundColor: Colors.red,
+                            ),
                           );
                         }
                       }
                     },
                     icon: const Icon(Icons.emoji_events),
                     label: const Text('Advance Bracket'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple,
+                      foregroundColor: Colors.white,
+                    ),
                   ),
                 ],
 
@@ -507,9 +693,15 @@ class _FixturesTabState extends State<FixturesTab> {
                     onPressed: () {
                       _generateRoundRobinFixtures(context);
                     },
-                    icon: const Icon(Icons.flash_on),
+                    icon: Icon(
+                      _isLoggedIn ? Icons.flash_on : Icons.lock_outline,
+                      size: 18,
+                    ),
                     label: const Text('Generate Fixtures'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isLoggedIn ? Colors.green : Colors.grey,
+                      foregroundColor: Colors.white,
+                    ),
                   ),
               ],
             ),
@@ -522,87 +714,122 @@ class _FixturesTabState extends State<FixturesTab> {
           child: widget.matches.isEmpty
               ? const Center(child: Text('No matches generated yet.'))
               : _activeViewMode == 'list'
-                  ? ListView.builder(
-                      itemCount: groupMatches.length,
-                      itemBuilder: (context, index) {
-                        final match = groupMatches[index];
-                        final p1Name = match['player1_name_fallback'] ?? 'Player 1';
-                        final p2Name = match['player2_name_fallback'] ?? 'Player 2';
-                        final isCompleted = match['status'] == 'completed';
-                        final p1Score = match['player1_score'] ?? 0;
-                        final p2Score = match['player2_score'] ?? 0;
+              ? ListView.builder(
+                  itemCount: groupMatches.length,
+                  itemBuilder: (context, index) {
+                    final match = groupMatches[index];
+                    final p1Name = match['player1_name_fallback'] ?? 'Player 1';
+                    final p2Name = match['player2_name_fallback'] ?? 'Player 2';
+                    final isCompleted = match['status'] == 'completed';
+                    final p1Score = match['player1_score'] ?? 0;
+                    final p2Score = match['player2_score'] ?? 0;
 
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          color: isCompleted ? Colors.green[50] : Colors.white,
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('$p1Name vs $p2Name', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        isCompleted ? 'Result: $p1Score - $p2Score Sets' : 'Status: SCHEDULED', 
-                                        style: TextStyle(color: isCompleted ? Colors.green : Colors.grey),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                ElevatedButton.icon(
-                                  onPressed: () {
-                                    _showScoreLoggingModal(context, match);
-                                  },
-                                  icon: Icon(isCompleted ? Icons.check_circle : Icons.edit_note, size: 18),
-                                  label: Text(isCompleted ? 'Edit Score' : 'Log Score'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    )
-                  : SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: bracketRounds.entries.map((roundEntry) {
-                          final String roundTitle = roundEntry.key;
-                          final List<Map<String, dynamic>> roundMatches = roundEntry.value;
-
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 24),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Chip(
-                                  label: Text(roundTitle, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                                  backgroundColor: Colors.blueAccent,
-                                ),
-                                const SizedBox(height: 16),
-                                Expanded(
-                                  child: SizedBox(
-                                    width: 240,
-                                    child: ListView.builder(
-                                      shrinkWrap: true,
-                                      physics: const ClampingScrollPhysics(),
-                                      itemCount: roundMatches.length,
-                                      itemBuilder: (context, matchIndex) {
-                                        return _buildBracketNodeCard(roundMatches[matchIndex]);
-                                      },
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      color: isCompleted ? Colors.green[50] : Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '$p1Name vs $p2Name',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
                                     ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    isCompleted
+                                        ? 'Result: $p1Score - $p2Score Sets'
+                                        : 'Status: SCHEDULED',
+                                    style: TextStyle(
+                                      color: isCompleted
+                                          ? Colors.green
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          );
-                        }).toList(),
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                if (!await requireAuth(context)) return;
+                                if (!context.mounted) return;
+                                _showScoreLoggingModal(context, match);
+                              },
+                              icon: Icon(
+                                _isLoggedIn
+                                    ? (isCompleted
+                                        ? Icons.check_circle
+                                        : Icons.edit_note)
+                                    : Icons.lock_outline,
+                                size: 18,
+                              ),
+                              label: Text(
+                                isCompleted ? 'Edit Score' : 'Log Score',
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _isLoggedIn ? null : Colors.grey[400],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    );
+                  },
+                )
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: bracketRounds.entries.map((roundEntry) {
+                      final String roundTitle = roundEntry.key;
+                      final List<Map<String, dynamic>> roundMatches =
+                          roundEntry.value;
+
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Chip(
+                              label: Text(
+                                roundTitle,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              backgroundColor: Colors.blueAccent,
+                            ),
+                            const SizedBox(height: 16),
+                            Expanded(
+                              child: SizedBox(
+                                width: 240,
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const ClampingScrollPhysics(),
+                                  itemCount: roundMatches.length,
+                                  itemBuilder: (context, matchIndex) {
+                                    return _buildBracketNodeCard(
+                                      roundMatches[matchIndex],
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
         ),
       ],
     );

@@ -12,13 +12,22 @@ class _CreateTournamentScreenState extends State<CreateTournamentScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _drFormController = TextEditingController();
-  
+
   int _roundRobinBestOf = 3;
   int _knockoutBestOf = 5;
   bool _isLoading = false;
 
   Future<void> _saveTournamentToDatabase() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be signed in to create a tournament.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -36,7 +45,13 @@ class _CreateTournamentScreenState extends State<CreateTournamentScreen> {
         'name': name,
         'status': 'upcoming',
         'settings': settingsConfig,
+        // 👇 Phase 1 fix: these dedicated columns were previously left at
+        // their defaults because only the JSONB `settings` blob was written.
+        'round_robin_sets': _roundRobinBestOf,
+        'knockout_sets': _knockoutBestOf,
         'dr_form_url': drUrl.isEmpty ? null : drUrl,
+        // 👇 Phase 1: ownership, required by RLS for this row to be editable later
+        'created_by': userId,
       });
 
       if (mounted) {
@@ -60,8 +75,8 @@ class _CreateTournamentScreenState extends State<CreateTournamentScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Configure Tournament')),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator()) 
+      body: _isLoading
+        ? const Center(child: CircularProgressIndicator())
         : Padding(
             padding: const EdgeInsets.all(24.0),
             child: Form(
@@ -78,7 +93,7 @@ class _CreateTournamentScreenState extends State<CreateTournamentScreen> {
                       validator: (value) => value == null || value.isEmpty ? 'Please give it a cool name' : null,
                     ),
                     const SizedBox(height: 30),
-                    
+
                     const Text('Match Game Rules Format', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
                     const Divider(),
                     DropdownButtonFormField<int>(
@@ -113,7 +128,7 @@ class _CreateTournamentScreenState extends State<CreateTournamentScreen> {
                       ),
                     ),
                     const SizedBox(height: 50),
-                    
+
                     SizedBox(
                       width: double.infinity,
                       height: 50,
