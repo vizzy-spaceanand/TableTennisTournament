@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+#Files output be command line to check status of the app
+codebase_dump.txt
+
+# supabase/schema.sql should NOT be in .gitignore

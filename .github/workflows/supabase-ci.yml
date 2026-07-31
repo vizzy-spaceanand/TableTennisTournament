@@ -33,6 +33,25 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
+      # Dump the live schema back to supabase/schema.sql and commit it.
+      # Only runs on main (prod) so the committed schema always reflects
+      # the production database — the source of truth.
+      # On develop (staging), schema.sql is updated locally via dump-schema.ps1
+      # before committing migrations, so CI doesn't need to write back to develop.
+      - name: Dump schema and commit
+        if: github.ref_name == 'main'
+        run: |
+          supabase db dump --linked -f supabase/schema.sql
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add supabase/schema.sql
+          # Only commit if schema.sql actually changed
+          git diff --staged --quiet || git commit -m "docs: update schema.sql after production migration [skip ci]"
+          git push
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
   # 💻 JOB 2: Dynamic Frontend Build with Target Injection
   deploy:
     needs: deploy-backend
