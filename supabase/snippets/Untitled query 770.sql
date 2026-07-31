@@ -1,1 +1,0 @@
-TRUNCATE TABLE matches, players, tournaments RESTART IDENTITY CASCADE;
